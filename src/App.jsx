@@ -38,7 +38,7 @@ const CSS = `
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  body:not([data-theme="light"]):not([data-theme="sepia"]) {
     --bg: #1a1a1a;
     --bg-card: #262626;
     --text: #e5e5e5;
@@ -48,6 +48,17 @@ const CSS = `
     --border-light: #333333;
     --accent-light: rgba(74, 111, 165, 0.2);
   }
+}
+
+body[data-theme="dark"] {
+  --bg: #1a1a1a;
+  --bg-card: #262626;
+  --text: #e5e5e5;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
+  --border: #404040;
+  --border-light: #333333;
+  --accent-light: rgba(74, 111, 165, 0.2);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -528,12 +539,12 @@ function AppContent() {
             <KanbanView entries={entries} onUpdateEntry={updateEntry} onAddEntry={addEntry} />
           )}
           {view === "ideas" && (
-            <IdeasCanvas 
+            <IdeasCanvas
               entries={entries} docs={docs} connections={connections} frames={frames} bgStrokes={bgStrokes}
               onAddEntry={addEntry}
-              onUpdateEntry={updateEntry} onUpdateDoc={updateDoc} onAddConnection={addConnection} onRemoveConnection={removeConnection}
+              onUpdateEntry={updateEntry} onRemoveEntry={removeEntry} onUpdateDoc={updateDoc} onAddConnection={addConnection} onRemoveConnection={removeConnection}
               onUpdateFrame={updateFrame} onAddFrame={addFrame} onRemoveFrame={removeFrame} onSetBgStrokes={setBgStrokes}
-              openDoc={openDoc} 
+              openDoc={openDoc}
             />
           )}
           {view === "docs" && (

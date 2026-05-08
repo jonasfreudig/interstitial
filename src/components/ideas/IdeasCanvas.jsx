@@ -33,7 +33,7 @@ function FreehandArea({ strokes = [], onStrokesChange, active, style, drawColor 
 
 export default function IdeasCanvas({
   entries, docs, connections, frames, bgStrokes, onAddEntry,
-  onUpdateEntry, onUpdateDoc, onAddConnection, onRemoveConnection,
+  onUpdateEntry, onRemoveEntry, onUpdateDoc, onAddConnection, onRemoveConnection,
   onUpdateFrame, onAddFrame, onRemoveFrame, onSetBgStrokes, openDoc
 }) {
   const [cam, setCam] = useState({ x: 0, y: 0, z: 1 });
@@ -142,6 +142,7 @@ export default function IdeasCanvas({
   };
 
   const onPointerMove = (e) => {
+    if (pinchRef.current) return;
     if (!dragRef.current) return;
     const d = dragRef.current;
     if (d.type === "pan") {
@@ -193,8 +194,10 @@ export default function IdeasCanvas({
 
   const onTouchStart = (ev) => {
     if (ev.touches.length === 2) {
+      dragRef.current = null;
       const t1 = ev.touches[0], t2 = ev.touches[1];
-      pinchRef.current = { dist: Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY), cx: (t1.clientX + t2.clientX) / 2, cy: (t1.clientY + t2.clientY) / 2, camX: cam.x, camY: cam.y, camZ: cam.z };
+      const cx = (t1.clientX + t2.clientX) / 2, cy = (t1.clientY + t2.clientY) / 2;
+      pinchRef.current = { dist: Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY), cx, cy, camX: cam.x, camY: cam.y, camZ: cam.z };
     } else if (ev.touches.length === 1 && mode === "select") {
       dragRef.current = { type: "pan", startX: ev.touches[0].clientX, startY: ev.touches[0].clientY, camX: cam.x, camY: cam.y };
     }
@@ -206,7 +209,12 @@ export default function IdeasCanvas({
       const t1 = ev.touches[0], t2 = ev.touches[1];
       const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
       const cx = (t1.clientX + t2.clientX) / 2, cy = (t1.clientY + t2.clientY) / 2;
-      setCam({ z: Math.max(0.05, Math.min(pinchRef.current.camZ * (dist / pinchRef.current.dist), 4)), x: pinchRef.current.camX + (cx - pinchRef.current.cx), y: pinchRef.current.camY + (cy - pinchRef.current.cy) });
+      const p = pinchRef.current;
+      const newZ = Math.max(0.05, Math.min(p.camZ * (dist / p.dist), 4));
+      // Zoom toward initial pinch center, then pan by how much the center has moved
+      const canvasX = (p.cx - p.camX) / p.camZ;
+      const canvasY = (p.cy - p.camY) / p.camZ;
+      setCam({ z: newZ, x: cx - canvasX * newZ, y: cy - canvasY * newZ });
     } else if (dragRef.current) {
       ev.preventDefault();
       onPointerMove(ev.touches[0]);
@@ -435,7 +443,7 @@ export default function IdeasCanvas({
                     if (idea.type === "sketch") { setEditingId(idea.id); setMode("select"); setSketchTool("draw"); } 
                     else { setEditingId(idea.id); setEditingText(idea.text); }
                   }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-tertiary)" }}>✎</button>
-                  <button onClick={() => onUpdateEntry(idea.id, { archived: true })} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--red)" }}>×</button>
+                  <button onClick={() => onRemoveEntry(idea.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--red)" }}>×</button>
                 </div>
               </div>
               
@@ -555,7 +563,7 @@ export default function IdeasCanvas({
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif", flex: 1 }}>{formatTime(idea.ts)}</span>
                   <button title="Restore" onClick={() => onUpdateEntry(idea.id, { archived: false })} style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 8, background: "none", cursor: "pointer", fontSize: 14, fontFamily: "'Inter', sans-serif", color: "var(--text-secondary)" }}>{isMobile ? "↺" : "Restore"}</button>
-                  <button title="Delete forever" onClick={() => onUpdateEntry(idea.id, { _delete: true })} style={{ padding: "4px 8px", border: "1px solid var(--red)", borderRadius: 8, background: "none", cursor: "pointer", fontSize: 14, fontFamily: "'Inter', sans-serif", color: "var(--red)" }}>{isMobile ? "×" : "Delete"}</button>
+                  <button title="Delete forever" onClick={() => onRemoveEntry(idea.id)} style={{ padding: "4px 8px", border: "1px solid var(--red)", borderRadius: 8, background: "none", cursor: "pointer", fontSize: 14, fontFamily: "'Inter', sans-serif", color: "var(--red)" }}>{isMobile ? "×" : "Delete"}</button>
                 </div>
               </div>
             ))}
