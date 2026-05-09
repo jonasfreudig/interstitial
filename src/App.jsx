@@ -47,7 +47,6 @@ const CSS = `
     --text-tertiary: #737373;
     --border: #404040;
     --border-light: #333333;
-    --accent-light: rgba(74, 111, 165, 0.2);
   }
 }
 
@@ -59,7 +58,6 @@ body[data-theme="dark"] {
   --text-tertiary: #737373;
   --border: #404040;
   --border-light: #333333;
-  --accent-light: rgba(74, 111, 165, 0.2);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -399,6 +397,25 @@ body {
 .anim-fade { animation: fadeIn 0.15s ease both; }
 `;
 
+// ---- Accent Colors ----
+export const ACCENTS = [
+  { name: "Blue",    value: "#4a6fa5" },
+  { name: "Indigo",  value: "#5856d6" },
+  { name: "Purple",  value: "#7a5c8a" },
+  { name: "Rose",    value: "#b5495b" },
+  { name: "Amber",   value: "#b87333" },
+  { name: "Green",   value: "#4a7c59" },
+  { name: "Teal",    value: "#2e8b7a" },
+  { name: "Slate",   value: "#5a7a8a" },
+];
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // ---- Global Search Component ----
 function GlobalSearch({ entries, docs, onClose, onOpenDoc, setView }) {
   const [q, setQ] = useState("");
@@ -489,6 +506,7 @@ function AppContent() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'system');
+  const [accent, setAccent] = useState(localStorage.getItem('accent') || '#4a6fa5');
   const [kanbanCols, setKanbanCols] = useState(KANBAN_COLS)
   const [showSearch, setShowSearch] = useState(false);
   const [showTimer, setShowTimer] = useState(false);
@@ -517,6 +535,13 @@ function AppContent() {
     document.body.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.style.setProperty('--accent', accent);
+    document.documentElement.style.setProperty('--accent-light', hexToRgba(accent, isDark ? 0.2 : 0.12));
+    localStorage.setItem('accent', accent);
+  }, [accent, theme]);
   
   const {
     entries, setEntries,
@@ -669,6 +694,8 @@ function AppContent() {
           onExport={handleExport}
           theme={theme}
           setTheme={setTheme}
+          accent={accent}
+          setAccent={setAccent}
           onOpenSearch={() => setShowSearch(true)}
           onOpenTimer={() => setShowTimer(s => !s)}
           timerRunning={timerRunning}
