@@ -4,8 +4,8 @@ import { TagChip, TagFilterBar, TagPicker, ColorPicker } from "../shared/TagSyst
 import { MarkdownContent, ENTRY_TYPES, formatTime, formatDate, formatShort } from "../../utils/helpers";
 import { extractLinks } from "../../utils/links";
 
-export default function JournalView({ 
-  entries, docs, onAddEntry, onUpdateEntry, onRemoveEntry, linkMap, allTags, openDoc
+export default function JournalView({
+  entries, docs, onAddEntry, onUpdateEntry, onRemoveEntry, linkMap, allTags, openDoc, onSendToCanvas
 }) {
   const [input, setInput] = useState("");
   const [inputType, setInputType] = useState("note");
@@ -279,7 +279,15 @@ export default function JournalView({
                         )}
                       </div>
                       
-                      {item.type !== "sketch" && <button className="eedit" onClick={() => startEdit(item)}>✎</button>}
+                      {item.type !== "sketch" && <button className="eedit" onClick={() => startEdit(item)} title="Edit">✎</button>}
+                      {onSendToCanvas && item.type !== "sketch" && (
+                        <button
+                          className="eedit"
+                          onClick={() => onSendToCanvas(item)}
+                          title={item.type === "idea" ? "View on Canvas" : "Send to Canvas"}
+                          style={{ fontSize: 13 }}
+                        >◈</button>
+                      )}
                       <button className="edel" onClick={() => onRemoveEntry(item.id)}>×</button>
                       <div className={`entry-ribbon ${item.color ? "" : "no-color"}`} style={{ background: item.color || "var(--border)" }} onClick={(e) => { e.stopPropagation(); setMetaEntryId(metaEntryId === item.id ? null : item.id); setEditingId(null); }} title="Color & tags" />
                     </>

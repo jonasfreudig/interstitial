@@ -4,18 +4,26 @@ import { TagChip, TagFilterBar, TagPicker } from "../shared/TagSystem";
 import { MarkdownContent, formatShort, formatTime, ENTRY_TYPES } from "../../utils/helpers";
 import { extractLinks, getLinkSuggestions } from "../../utils/links";
 
+const TEMPLATES = [
+  { name: "Meeting Notes", icon: "◎", content: "## Agenda\n\n## Notes\n\n## Action Items\n- [ ] \n\n## Follow-up" },
+  { name: "Project Brief", icon: "◈", content: "## Overview\n\n## Goals\n- \n\n## Timeline\n\n## Notes" },
+  { name: "Daily Log", icon: "◦", content: () => `## ${new Date().toLocaleDateString()}\n\n### Morning\n\n### Afternoon\n\n### Wins` },
+  { name: "Decision Record", icon: "⊞", content: "## Context\n\n## Options\n\n## Decision\n\n## Consequences" },
+];
+
 export default function DocsView({ 
   docs, entries, allTags, onAddDoc, onUpdateDoc, onDeleteDoc, onLinkEntry, onUnlinkEntry,
   activeDocId, setActiveDocId 
 }) {
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState(null);
-  const [preview, setPreview] = useState(false);
+  const [viewMode, setViewMode] = useState("edit"); // "edit" | "preview" | "split"
   const [showLinkSearch, setShowLinkSearch] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [showLinkAutocomplete, setShowLinkAutocomplete] = useState(false);
   const [linkAutocompletePos, setLinkAutocompletePos] = useState(null);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   
   const contentRef = useRef(null);
   const linkInputRef = useRef(null);
@@ -36,13 +44,26 @@ export default function DocsView({
       result = result.filter(d => d.title?.toLowerCase().includes(q) || d.content?.toLowerCase().includes(q) || d.tags?.some(t => t.toLowerCase().includes(q)));
     }
     if (tagFilter) result = result.filter(d => (d.tags || []).includes(tagFilter));
-    return result.sort((a, b) => (b.updatedAt || b.ts) - (a.updatedAt || a.ts));
+    return result.sort((a, b) => {
+      if (b.pinned && !a.pinned) return 1;
+      if (a.pinned && !b.pinned) return -1;
+      return (b.updatedAt || b.ts) - (a.updatedAt || a.ts);
+    });
   }, [docs, search, tagFilter]);
 
   const handleNewDoc = () => {
     const doc = onAddDoc({ title: "", content: "", tags: [] });
     setActiveDocId(doc.id);
-    setPreview(false);
+    setViewMode("edit");
+    setShowTemplatePicker(false);
+  };
+
+  const handleNewFromTemplate = (tpl) => {
+    const content = typeof tpl.content === "function" ? tpl.content() : tpl.content;
+    const doc = onAddDoc({ title: tpl.name, content, tags: [] });
+    setActiveDocId(doc.id);
+    setViewMode("edit");
+    setShowTemplatePicker(false);
   };
 
   const handleContentChange = (content) => {
@@ -96,6 +117,15 @@ export default function DocsView({
     return activeDoc.linkedEntryIds.map(id => entries.find(e => e.id === id)).filter(Boolean);
   }, [activeDoc, entries]);
 
+  const backlinks = useMemo(() => {
+    if (!activeDoc?.title) return { docs: [], entries: [] };
+    const titleLower = activeDoc.title.toLowerCase();
+    return {
+      docs: docs.filter(d => d.id !== activeDocId && d.content?.toLowerCase().includes(`[[${titleLower}]]`)),
+      entries: entries.filter(e => (e.linkedDocs || []).includes(activeDocId) && !(activeDoc.linkedEntryIds || []).includes(e.id))
+    };
+  }, [activeDoc, docs, entries, activeDocId]);
+
   const handleLinkClick = (query) => {
     const matchedEntry = entries.find(e => e.text?.toLowerCase().includes(query.toLowerCase()));
     if (matchedEntry && activeDoc) onLinkEntry(matchedEntry.id, activeDoc.id);
@@ -113,7 +143,20 @@ export default function DocsView({
           <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid var(--border-light)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 600, color: "var(--text)" }}>≡ Documents</span>
-              <button onClick={handleNewDoc} style={{ padding: "6px 16px", background: "var(--text)", color: "var(--bg)", border: "none", borderRadius: 16, cursor: "pointer", fontSize: 13, fontFamily: "'Inter', sans-serif", fontWeight: 500 }}>+ New</button>
+              <div style={{ display: "flex", gap: 6, position: "relative" }}>
+                <button onClick={() => setShowTemplatePicker(s => !s)} style={{ padding: "6px 12px", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 16, cursor: "pointer", fontSize: 13, fontFamily: "'Inter', sans-serif" }} title="From template">⊞</button>
+                <button onClick={handleNewDoc} style={{ padding: "6px 16px", background: "var(--text)", color: "var(--bg)", border: "none", borderRadius: 16, cursor: "pointer", fontSize: 13, fontFamily: "'Inter', sans-serif", fontWeight: 500 }}>+ New</button>
+                {showTemplatePicker && (
+                  <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "var(--shadow-md)", zIndex: 100, minWidth: 180, overflow: "hidden" }}>
+                    {TEMPLATES.map(tpl => (
+                      <button key={tpl.name} onClick={() => handleNewFromTemplate(tpl)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", border: "none", borderBottom: "1px solid var(--border-light)", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--text)" }} onMouseEnter={e => e.currentTarget.style.background = "var(--accent-light)"} onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                        <span style={{ color: "var(--text-tertiary)" }}>{tpl.icon}</span>
+                        {tpl.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)", fontSize: 14 }}>◎</span>
@@ -129,14 +172,20 @@ export default function DocsView({
               <div style={{ padding: 40, textAlign: "center", color: "var(--text-tertiary)", fontFamily: "'Newsreader', serif", fontSize: 16 }}>{search || tagFilter ? "No matching docs" : "No documents yet"}</div>
             ) : (
               filtered.map(doc => (
-                <button key={doc.id} onClick={() => { setActiveDocId(doc.id); setPreview(false); }} style={{ display: "block", width: "100%", padding: "14px 16px", border: "none", borderBottom: "1px solid var(--border-light)", borderLeft: doc.id === activeDocId ? "3px solid var(--accent)" : "3px solid transparent", background: doc.id === activeDocId ? "var(--accent-light)" : "transparent", cursor: "pointer", textAlign: "left", transition: "background 0.15s" }}>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, color: "var(--text)", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title || "Untitled"}</div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    {doc.tags?.slice(0, 2).map(t => <TagChip key={t} tag={t} size="sm" />)}
-                    <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>{formatShort(doc.updatedAt)}</span>
-                    {(doc.linkedEntryIds || []).length > 0 && <span style={{ fontSize: 11, color: "var(--accent)", fontFamily: "'Inter', sans-serif" }}>{(doc.linkedEntryIds || []).length} linked</span>}
-                  </div>
-                </button>
+                <div key={doc.id} style={{ display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--border-light)", borderLeft: doc.id === activeDocId ? "3px solid var(--accent)" : "3px solid transparent", background: doc.id === activeDocId ? "var(--accent-light)" : "transparent", transition: "background 0.15s" }}>
+                  <button onClick={() => { setActiveDocId(doc.id); setViewMode("edit"); }} style={{ flex: 1, padding: "14px 16px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}>
+                    <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 500, color: "var(--text)", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
+                      {doc.pinned && <span style={{ color: "var(--amber)", fontSize: 12 }}>★</span>}
+                      {doc.title || "Untitled"}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      {doc.tags?.slice(0, 2).map(t => <TagChip key={t} tag={t} size="sm" />)}
+                      <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>{formatShort(doc.updatedAt)}</span>
+                      {(doc.linkedEntryIds || []).length > 0 && <span style={{ fontSize: 11, color: "var(--accent)", fontFamily: "'Inter', sans-serif" }}>{(doc.linkedEntryIds || []).length} linked</span>}
+                    </div>
+                  </button>
+                  <button onClick={() => onUpdateDoc(doc.id, { pinned: !doc.pinned })} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 10px", color: doc.pinned ? "var(--amber)" : "var(--text-tertiary)", fontSize: 14, opacity: doc.pinned ? 1 : 0.4, flexShrink: 0 }} title={doc.pinned ? "Unpin" : "Pin to top"}>★</button>
+                </div>
               ))
             )}
           </div>
@@ -172,7 +221,13 @@ export default function DocsView({
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-light)" }}>
                   <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>Updated {formatShort(activeDoc.updatedAt)}</span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => setPreview(!preview)} style={{ padding: "5px 14px", border: "1px solid var(--border)", borderRadius: 14, background: preview ? "var(--accent)" : "transparent", color: preview ? "white" : "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif" }}>{preview ? "✎ Edit" : "◈ Preview"}</button>
+                  <div style={{ display: "flex", gap: 2, border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
+                    {[["edit", "✎"], ["split", "⊞"], ["preview", "◈"]].map(([m, sym]) => (
+                      <button key={m} onClick={() => setViewMode(m)} style={{ padding: "5px 10px", border: "none", borderRadius: 0, background: viewMode === m ? "var(--accent)" : "transparent", color: viewMode === m ? "white" : "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif" }} title={m === "edit" ? "Edit" : m === "split" ? "Split view" : "Preview"}>{sym}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => onUpdateDoc(activeDocId, { pinned: !activeDoc.pinned })} style={{ padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 14, background: activeDoc.pinned ? "rgba(184,115,51,0.1)" : "transparent", color: activeDoc.pinned ? "var(--amber)" : "var(--text-secondary)", cursor: "pointer", fontSize: 13, fontFamily: "'Inter', sans-serif" }} title={activeDoc.pinned ? "Unpin" : "Pin to top"}>★</button>
+                  <button onClick={() => { const blob = new Blob([`# ${activeDoc.title}\n\n${activeDoc.content || ""}`], { type: "text/markdown" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${activeDoc.title || "document"}.md`; a.click(); URL.revokeObjectURL(url); }} style={{ padding: "5px 14px", border: "1px solid var(--border)", borderRadius: 14, background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif" }} title="Export as Markdown">↓ .md</button>
                   <button onClick={() => onUpdateDoc(activeDocId, { onCanvas: !activeDoc.onCanvas })} style={{ padding: "5px 14px", border: "1px solid var(--border)", borderRadius: 14, background: activeDoc.onCanvas ? "var(--accent-light)" : "transparent", color: activeDoc.onCanvas ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif" }}>{activeDoc.onCanvas ? "◈ On Canvas" : "◈ To Canvas"}</button>
                   <button onClick={() => { if (window.confirm("Delete this document?")) { onDeleteDoc(activeDocId); setActiveDocId(null); } }} style={{ padding: "5px 14px", border: "1px solid var(--border)", borderRadius: 14, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif" }}>Delete</button>
                 </div>
@@ -182,22 +237,25 @@ export default function DocsView({
                 <FormatToolbar value={activeDoc.content || ""} onChange={handleContentChange} textareaRef={contentRef} />
               </div>
               
-              <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", position: "relative" }}>
-                {preview ? (
-                  <div style={{ fontFamily: "'Newsreader', Georgia, serif", fontSize: 16, lineHeight: 1.8, color: "var(--text)" }}>
-                    <MarkdownContent text={activeDoc.content || ""} onLinkClick={handleLinkClick} />
+              <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+                {viewMode !== "preview" && (
+                  <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", position: "relative", borderRight: viewMode === "split" ? "1px solid var(--border-light)" : "none" }}>
+                    <textarea ref={contentRef} value={activeDoc.content || ""} onChange={e => handleContentChange(e.target.value)} placeholder={"Start writing...\n\n## Formatting\n- **bold** *italic* `code`\n- ## Heading\n- - [ ] Task\n- -! Idea\n- [[Link to entry or doc]]"} style={{ width: "100%", height: "100%", minHeight: 300, border: "none", outline: "none", background: "transparent", fontFamily: "'Newsreader', Georgia, serif", fontSize: 16, lineHeight: 1.8, color: "var(--text)", resize: "none" }} />
+                    {showLinkAutocomplete && linkSuggestions.length > 0 && (
+                      <div style={{ position: "absolute", top: linkAutocompletePos?.top || 100, left: linkAutocompletePos?.left || 28, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-md)", zIndex: 100, maxHeight: 200, overflow: "auto", minWidth: 250 }}>
+                        {linkSuggestions.map(s => (
+                          <button key={s.id} onClick={() => insertLink(s)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", border: "none", borderBottom: "1px solid var(--border-light)", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--text)" }} onMouseEnter={e => e.currentTarget.style.background = "var(--accent-light)"} onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                            <span style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{s.type === "entry" ? "◎" : "≡"}</span>
+                            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <textarea ref={contentRef} value={activeDoc.content || ""} onChange={e => handleContentChange(e.target.value)} placeholder={"Start writing...\n\n## Formatting\n- **bold** *italic* `code`\n- ## Heading\n- - [ ] Task\n- -! Idea\n- [[Link to entry or doc]]"} style={{ width: "100%", height: "100%", minHeight: 300, border: "none", outline: "none", background: "transparent", fontFamily: "'Newsreader', Georgia, serif", fontSize: 16, lineHeight: 1.8, color: "var(--text)", resize: "none" }} />
                 )}
-                {showLinkAutocomplete && linkSuggestions.length > 0 && (
-                  <div style={{ position: "absolute", top: linkAutocompletePos?.top || 100, left: linkAutocompletePos?.left || 28, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-md)", zIndex: 100, maxHeight: 200, overflow: "auto", minWidth: 250 }}>
-                    {linkSuggestions.map(s => (
-                      <button key={s.id} onClick={() => insertLink(s)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", border: "none", borderBottom: "1px solid var(--border-light)", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--text)" }} onMouseEnter={e => e.currentTarget.style.background = "var(--accent-light)"} onMouseLeave={e => e.currentTarget.style.background = "none"}>
-                        <span style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{s.type === "entry" ? "◎" : "≡"}</span>
-                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
-                      </button>
-                    ))}
+                {viewMode !== "edit" && (
+                  <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", fontFamily: "'Newsreader', Georgia, serif", fontSize: 16, lineHeight: 1.8, color: "var(--text)" }}>
+                    <MarkdownContent text={activeDoc.content || ""} onLinkClick={handleLinkClick} />
                   </div>
                 )}
               </div>
@@ -236,6 +294,28 @@ export default function DocsView({
                   </div>
                 )}
               </div>
+
+              {(backlinks.docs.length > 0 || backlinks.entries.length > 0) && (
+                <div style={{ borderTop: "1px solid var(--border)", background: "var(--bg-card)", padding: "14px 28px", maxHeight: 180, overflow: "auto" }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: "var(--text-tertiary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Referenced by</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {backlinks.docs.map(d => (
+                      <button key={d.id} onClick={() => setActiveDocId(d.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--bg)", borderRadius: 6, border: "1px solid var(--border-light)", cursor: "pointer", textAlign: "left" }}>
+                        <span style={{ color: "var(--accent)", fontSize: 13 }}>≡</span>
+                        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title || "Untitled"}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>doc</span>
+                      </button>
+                    ))}
+                    {backlinks.entries.map(e => (
+                      <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--bg)", borderRadius: 6, border: "1px solid var(--border-light)" }}>
+                        <span style={{ color: ENTRY_TYPES[e.type]?.col || "var(--text-tertiary)", fontSize: 13 }}>{ENTRY_TYPES[e.type]?.sym || "◦"}</span>
+                        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.text?.slice(0, 80)}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>entry</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
