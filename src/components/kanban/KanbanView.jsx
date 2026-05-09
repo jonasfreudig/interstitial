@@ -36,7 +36,6 @@ export default function KanbanView({ entries, onUpdateEntry, onAddEntry, allTags
   const [overCol, setOverCol]         = useState(null);
   const [editingId, setEditingId]     = useState(null);
   const [editingText, setEditingText] = useState("");
-  const [newTask, setNewTask] = useState("");
   const [recurrencePickerId, setRecurrencePickerId] = useState(null);
   const [expandedId, setExpandedId]   = useState(null);
   const [showTagPicker, setShowTagPicker] = useState(null);
