@@ -40,6 +40,7 @@ export function AppProvider({ children }) {
       width: entryData.width || 220,
       height: entryData.height || 160,
       strokes: entryData.strokes || [],
+      imageData: entryData.imageData || null,
       archived: false,
     };
     

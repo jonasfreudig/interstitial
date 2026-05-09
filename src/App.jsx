@@ -705,7 +705,7 @@ function AppContent() {
             )}
           </div>
         </div>
-        <MobileNav view={view} setView={setView} />
+        <MobileNav view={view} setView={setView} onOpenTimer={() => setShowTimer(s => !s)} timerRunning={timerRunning} />
       </div>
       {showSearch && (
         <GlobalSearch

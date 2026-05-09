@@ -151,7 +151,7 @@ export default function JournalView({
           
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border-light)" }}>
             <div style={{ display: "flex", gap: 6 }}>
-              {Object.entries(ENTRY_TYPES).filter(([k]) => k !== "sketch").map(([type, { sym, label, col }]) => (
+              {Object.entries(ENTRY_TYPES).filter(([k]) => k !== "sketch" && k !== "image").map(([type, { sym, label, col }]) => (
                 <button
                   key={type}
                   onClick={() => setInputType(type)}
