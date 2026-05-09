@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { AppProvider, useAppContext } from "./context/AppContext.jsx";
-import { formatTime, formatDate, formatShort, generateId } from "./utils/helpers.jsx";
+import { formatTime, formatDate, formatShort, generateId, KANBAN_COLS } from "./utils/helpers.jsx";
 import { extractLinks, resolveLinks, processBidirectionalLinks } from "./utils/links.jsx";
 import AuthView from "./components/auth/AuthView";
 import Nav from "./components/layout/Nav";
@@ -376,6 +376,18 @@ body {
   --bg: #f2ebe0; --bg-card: #fffde8; --text: #2c2010; --text-secondary: #4a3c2e; --text-tertiary: #7a6e62;
   --border: #d8cfbe; --border-light: #e8e0d4; --accent-light: rgba(74, 111, 165, 0.1);
 }
+
+/* Animations */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.anim-view { animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-fade { animation: fadeIn 0.15s ease both; }
 `;
 
 // ---- Main App Component ----
@@ -385,7 +397,8 @@ function AppContent() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'system');
-  
+  const [kanbanCols, setKanbanCols] = useState(KANBAN_COLS)
+
   // Lifted state to allow "Jump to Doc" to work seamlessly globally
   const [activeDocId, setActiveDocId] = useState(null);
   
@@ -436,6 +449,7 @@ function AppContent() {
           setConnections(data.data.connections || []);
           setFrames(data.data.frames || []);
           setBgStrokes(data.data.bgStrokes || []);
+          if (data.data.kanbanCols?.length) setKanbanCols(data.data.kanbanCols);
         }
       } catch (err) {
         setLoadError(err.message);
@@ -458,7 +472,7 @@ function AppContent() {
           .from("user_journals")
           .upsert({
             user_id: session.user.id,
-            data: { entries, docs, connections, frames, bgStrokes },
+            data: { entries, docs, connections, frames, bgStrokes, kanbanCols },
             updated_at: new Date().toISOString()
           });
           
@@ -470,7 +484,7 @@ function AppContent() {
     }, 1200);
     
     return () => clearTimeout(timer);
-  }, [entries, docs, connections, frames, bgStrokes, loaded]);
+  }, [entries, docs, connections, frames, bgStrokes, kanbanCols, loaded]);
 
   const linkMap = processAllLinks(entries, docs);
 
@@ -529,30 +543,35 @@ function AppContent() {
           setTheme={setTheme}
         />
         <div className="app-content">
-          {view === "journal" && (
-            <JournalView 
-              entries={entries} docs={docs} onAddEntry={addEntry} onUpdateEntry={updateEntry} onRemoveEntry={removeEntry} linkMap={linkMap} allTags={allTags}
-              openDoc={openDoc} 
-            />
-          )}
-          {view === "kanban" && (
-            <KanbanView entries={entries} onUpdateEntry={updateEntry} onAddEntry={addEntry} />
-          )}
-          {view === "ideas" && (
-            <IdeasCanvas
-              entries={entries} docs={docs} connections={connections} frames={frames} bgStrokes={bgStrokes}
-              onAddEntry={addEntry}
-              onUpdateEntry={updateEntry} onRemoveEntry={removeEntry} onUpdateDoc={updateDoc} onAddConnection={addConnection} onRemoveConnection={removeConnection}
-              onUpdateFrame={updateFrame} onAddFrame={addFrame} onRemoveFrame={removeFrame} onSetBgStrokes={setBgStrokes}
-              openDoc={openDoc}
-            />
-          )}
-          {view === "docs" && (
-            <DocsView 
-              docs={docs} entries={entries} allTags={allTags} onAddDoc={addDoc} onUpdateDoc={updateDoc} onDeleteDoc={deleteDoc} onLinkEntry={linkEntryToDoc} onUnlinkEntry={unlinkEntryFromDoc}
-              activeDocId={activeDocId} setActiveDocId={setActiveDocId} 
-            />
-          )}
+                    <div key={view} className="anim-view" style={{ height: "100%" }}>
+            {view === "journal" && (
+              <JournalView
+                entries={entries} docs={docs} onAddEntry={addEntry} onUpdateEntry={updateEntry} onRemoveEntry={removeEntry} linkMap={linkMap} allTags={allTags}
+                openDoc={openDoc}
+              />
+            )}
+            {view === "kanban" && (
+              <KanbanView
+                entries={entries} onUpdateEntry={updateEntry} onAddEntry={addEntry}
+                allTags={allTags} kanbanCols={kanbanCols} setKanbanCols={setKanbanCols}
+              />
+            )}
+            {view === "ideas" && (
+              <IdeasCanvas
+                entries={entries} docs={docs} connections={connections} frames={frames} bgStrokes={bgStrokes}
+                onAddEntry={addEntry}
+                onUpdateEntry={updateEntry} onRemoveEntry={removeEntry} onUpdateDoc={updateDoc} onAddConnection={addConnection} onRemoveConnection={removeConnection}
+                onUpdateFrame={updateFrame} onAddFrame={addFrame} onRemoveFrame={removeFrame} onSetBgStrokes={setBgStrokes}
+                openDoc={openDoc}
+              />
+            )}
+            {view === "docs" && (
+              <DocsView
+                docs={docs} entries={entries} allTags={allTags} onAddDoc={addDoc} onUpdateDoc={updateDoc} onDeleteDoc={deleteDoc} onLinkEntry={linkEntryToDoc} onUnlinkEntry={unlinkEntryFromDoc}
+                activeDocId={activeDocId} setActiveDocId={setActiveDocId}
+              />
+            )}
+          </div>
         </div>
         <MobileNav view={view} setView={setView} />
       </div>
