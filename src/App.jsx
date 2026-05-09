@@ -10,6 +10,7 @@ import JournalView from "./components/journal/JournalView";
 import KanbanView from "./components/kanban/KanbanView";
 import IdeasCanvas from "./components/ideas/IdeasCanvas";
 import DocsView from "./components/docs/DocsView";
+import PomodoroTimer from "./components/timer/PomodoroTimer";
 
 // ---- CSS Import ----
 const CSS = `
@@ -291,6 +292,14 @@ body {
   border-radius: 0 4px 4px 0;
 }
 
+.blockquote-line {
+  border-left: 3px solid var(--border);
+  padding: 4px 12px;
+  margin: 4px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 .doc-link {
   display: inline-flex;
   align-items: center;
@@ -482,6 +491,8 @@ function AppContent() {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'system');
   const [kanbanCols, setKanbanCols] = useState(KANBAN_COLS)
   const [showSearch, setShowSearch] = useState(false);
+  const [showTimer, setShowTimer] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(false);
 
   // Lifted state to allow "Jump to Doc" to work seamlessly globally
   const [activeDocId, setActiveDocId] = useState(null);
@@ -513,12 +524,14 @@ function AppContent() {
     connections, setConnections,
     frames, setFrames,
     bgStrokes, setBgStrokes,
+    folders, setFolders,
     allTags,
     addEntry, updateEntry, removeEntry,
     addDoc, updateDoc, deleteDoc,
     linkEntryToDoc, unlinkEntryFromDoc,
     addConnection, removeConnection,
     updateFrame, addFrame, removeFrame,
+    addFolder, updateFolder, removeFolder,
     processAllLinks
   } = useAppContext();
 
@@ -544,6 +557,7 @@ function AppContent() {
           setConnections(data.data.connections || []);
           setFrames(data.data.frames || []);
           setBgStrokes(data.data.bgStrokes || []);
+          setFolders(data.data.folders || []);
           if (data.data.kanbanCols?.length) setKanbanCols(data.data.kanbanCols);
         }
       } catch (err) {
@@ -567,7 +581,7 @@ function AppContent() {
           .from("user_journals")
           .upsert({
             user_id: session.user.id,
-            data: { entries, docs, connections, frames, bgStrokes, kanbanCols },
+            data: { entries, docs, connections, frames, bgStrokes, kanbanCols , folders },
             updated_at: new Date().toISOString()
           });
           
@@ -579,7 +593,7 @@ function AppContent() {
     }, 1200);
     
     return () => clearTimeout(timer);
-  }, [entries, docs, connections, frames, bgStrokes, kanbanCols, loaded]);
+  }, [entries, docs, connections, frames, bgStrokes, kanbanCols , folders, loaded]);
 
   const linkMap = processAllLinks(entries, docs);
 
@@ -656,6 +670,8 @@ function AppContent() {
           theme={theme}
           setTheme={setTheme}
           onOpenSearch={() => setShowSearch(true)}
+          onOpenTimer={() => setShowTimer(s => !s)}
+          timerRunning={timerRunning}
         />
         <div className="app-content">
                     <div key={view} className="anim-view" style={{ height: "100%" }}>
@@ -684,6 +700,7 @@ function AppContent() {
               <DocsView
                 docs={docs} entries={entries} allTags={allTags} onAddDoc={addDoc} onUpdateDoc={updateDoc} onDeleteDoc={deleteDoc} onLinkEntry={linkEntryToDoc} onUnlinkEntry={unlinkEntryFromDoc}
                 activeDocId={activeDocId} setActiveDocId={setActiveDocId}
+                folders={folders} onAddFolder={addFolder} onUpdateFolder={updateFolder} onRemoveFolder={removeFolder}
               />
             )}
           </div>
@@ -697,6 +714,12 @@ function AppContent() {
           onClose={() => setShowSearch(false)}
           onOpenDoc={openDoc}
           setView={setView}
+        />
+      )}
+      {showTimer && (
+        <PomodoroTimer
+          onClose={() => setShowTimer(false)}
+          onRunningChange={setTimerRunning}
         />
       )}
     </>

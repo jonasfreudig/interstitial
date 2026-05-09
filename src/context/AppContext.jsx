@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo } from "react";
-import { generateId } from "../utils/helpers";
+import { generateId, computeNextOccurrence } from "../utils/helpers";
 import { extractLinks, processBidirectionalLinks } from "../utils/links";
 
 const AppContext = createContext(null);
@@ -8,6 +8,7 @@ export function AppProvider({ children }) {
   const [entries, setEntries] = useState([]);
   const [docs, setDocs] = useState([]);
   const [connections, setConnections] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [frames, setFrames] = useState([]);
   const [bgStrokes, setBgStrokes] = useState([]);
 
@@ -60,28 +61,41 @@ export function AppProvider({ children }) {
   }, [docs]);
 
   const updateEntry = useCallback((id, updates) => {
-    setEntries(prev => prev.map(e => {
-      if (e.id !== id) return e;
-      
-      const updated = { ...e, ...updates };
-      
-      // Re-process links if text changed
-      if (updates.text) {
-        const links = extractLinks(updates.text);
-        const newLinkedDocs = [...(e.linkedDocs || [])];
-        links.forEach(link => {
-          const matchedDoc = docs.find(d => 
-            d.title?.toLowerCase().includes(link.query.toLowerCase())
-          );
-          if (matchedDoc && !newLinkedDocs.includes(matchedDoc.id)) {
-            newLinkedDocs.push(matchedDoc.id);
-          }
-        });
-        updated.linkedDocs = newLinkedDocs;
+    setEntries(prev => {
+      const entry = prev.find(e => e.id === id);
+      const mapped = prev.map(e => {
+        if (e.id !== id) return e;
+        const updated = { ...e, ...updates };
+        if (updates.text) {
+          const links = extractLinks(updates.text);
+          const newLinkedDocs = [...(e.linkedDocs || [])];
+          links.forEach(link => {
+            const matchedDoc = docs.find(d =>
+              d.title?.toLowerCase().includes(link.query.toLowerCase())
+            );
+            if (matchedDoc && !newLinkedDocs.includes(matchedDoc.id)) {
+              newLinkedDocs.push(matchedDoc.id);
+            }
+          });
+          updated.linkedDocs = newLinkedDocs;
+        }
+        return updated;
+      });
+
+      // Auto-create next occurrence for recurring tasks marked done
+      if (updates.done === true && entry?.recurrence && entry?.type === "task") {
+        const nextTs = computeNextOccurrence(entry.recurrence);
+        const nextEntry = {
+          ...entry,
+          id: generateId(),
+          ts: nextTs,
+          done: false,
+          kanban: "backlog",
+        };
+        return [...mapped, nextEntry];
       }
-      
-      return updated;
-    }));
+      return mapped;
+    });
   }, [docs]);
 
   const removeEntry = useCallback((id) => {
@@ -251,6 +265,22 @@ export function AppProvider({ children }) {
     setFrames(prev => prev.filter(f => f.id !== id));
   }, []);
 
+  // ---- Folder Operations ----
+  const addFolder = useCallback((data) => {
+    const folder = { id: generateId(), name: data.name || "New Folder", color: data.color || "#4a6fa5" };
+    setFolders(prev => [...prev, folder]);
+    return folder;
+  }, []);
+
+  const updateFolder = useCallback((id, updates) => {
+    setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  }, []);
+
+  const removeFolder = useCallback((id) => {
+    setFolders(prev => prev.filter(f => f.id !== id));
+    setDocs(prev => prev.map(d => d.folderId === id ? { ...d, folderId: null } : d));
+  }, []);
+
   // ---- Process all bidirectional links ----
   const processAllLinks = useCallback((entries, docs) => {
     return processBidirectionalLinks(entries, docs);
@@ -262,12 +292,14 @@ export function AppProvider({ children }) {
     connections, setConnections,
     frames, setFrames,
     bgStrokes, setBgStrokes,
+    folders, setFolders,
     allTags,
     addEntry, updateEntry, removeEntry,
     addDoc, updateDoc, deleteDoc,
     linkEntryToDoc, unlinkEntryFromDoc,
     addConnection, removeConnection,
     addFrame, updateFrame, removeFrame,
+    addFolder, updateFolder, removeFolder,
     processAllLinks,
   };
 

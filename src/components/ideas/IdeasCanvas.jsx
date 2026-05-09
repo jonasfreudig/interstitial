@@ -98,8 +98,8 @@ export default function IdeasCanvas({
     });
   }, []);
 
-  const activeIdeas = useMemo(() => entries.filter(e => (e.type === "idea" || e.type === "sketch") && !e.archived), [entries]);
-  const archivedIdeas = useMemo(() => entries.filter(e => (e.type === "idea" || e.type === "sketch") && e.archived), [entries]);
+  const activeIdeas = useMemo(() => entries.filter(e => (e.type === "idea" || e.type === "sketch" || e.type === "image") && !e.archived), [entries]);
+  const archivedIdeas = useMemo(() => entries.filter(e => (e.type === "idea" || e.type === "sketch" || e.type === "image") && e.archived), [entries]);
   const docCards = useMemo(() => docs.filter(d => d.onCanvas), [docs]);
 
   useEffect(() => {
@@ -308,6 +308,41 @@ export default function IdeasCanvas({
     setCam({ x: vw / 2 - ((minX + maxX) / 2) * newZ, y: vh / 2 - ((minY + maxY) / 2) * newZ, z: Math.max(0.05, newZ) });
   };
 
+  const handlePaste = useCallback((e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const vw = viewportRef.current?.clientWidth || 800;
+          const vh = viewportRef.current?.clientHeight || 600;
+          onAddEntry({ type: "image", imageData: ev.target.result, text: "", ideaX: (vw / 2 - cam.x) / cam.z - 150, ideaY: (vh / 2 - cam.y) / cam.z - 100, width: 300, height: 200, strokes: [], archived: false });
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  }, [cam, onAddEntry]);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    const rect = viewportRef.current.getBoundingClientRect();
+    files.forEach((file, idx) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const x = (e.clientX - rect.left - cam.x) / cam.z + idx * 24 - 150;
+        const y = (e.clientY - rect.top - cam.y) / cam.z + idx * 24 - 100;
+        onAddEntry({ type: "image", imageData: ev.target.result, text: "", ideaX: x, ideaY: y, width: 300, height: 200, strokes: [], archived: false });
+      };
+      reader.readAsDataURL(file);
+    });
+  }, [cam, onAddEntry]);
+
   const [currentStroke, setCurrentStroke] = useState(null);
   const onDrawPointerDown = (e) => {
     if (mode !== "draw" && mode !== "erase") return;
@@ -340,9 +375,11 @@ export default function IdeasCanvas({
   return (
     <div
       ref={viewportRef}
-      style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative", cursor: mode === "connect" || mode === "frame" ? "crosshair" : mode === "draw" ? "crosshair" : mode === "erase" ? "cell" : "default", touchAction: "none" }}
+      tabIndex={0}
+      style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative", cursor: mode === "connect" || mode === "frame" ? "crosshair" : mode === "draw" ? "crosshair" : mode === "erase" ? "cell" : "default", touchAction: "none", outline: "none" }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onContextMenu={e => e.preventDefault()}
       onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onPointerUp} onTouchCancel={onPointerUp}
+      onPaste={handlePaste} onDragOver={e => e.preventDefault()} onDrop={handleDrop}
     >
       {activeIdeas.length === 0 && docCards.length === 0 && !showArchive && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", color: "var(--text-tertiary)", pointerEvents: "none" }}>
@@ -442,11 +479,16 @@ export default function IdeasCanvas({
                       </div>
                     )}
                   </div>
+                ) : idea.type === "image" ? (
+                  <div style={{ position: "relative" }}>
+                    <img src={idea.imageData} alt="" style={{ width: "100%", borderRadius: 4, display: "block", pointerEvents: "none", userSelect: "none" }} draggable={false} />
+                    <div onPointerDown={e => onResizeDrag(e, idea)} style={{ position: "absolute", bottom: 0, right: 0, width: 16, height: 16, cursor: "nwse-resize", opacity: 0.4, color: "var(--text-tertiary)" }}>◢</div>
+                  </div>
                 ) : isEditing ? (
-                  <textarea 
-                    ref={editRef} 
-                    value={editingText} 
-                    onChange={e => setEditingText(e.target.value)} 
+                  <textarea
+                    ref={editRef}
+                    value={editingText}
+                    onChange={e => setEditingText(e.target.value)}
                     onPointerDown={e => e.stopPropagation()} /* PREVENT NOTE DRAG */
                     onClick={e => e.stopPropagation()} 
                     onKeyDown={e => { if (e.key === "Escape") setEditingId(null); if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); onUpdateEntry(idea.id, { text: editingText.trim() }); setEditingId(null); } }} 

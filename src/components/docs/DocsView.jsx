@@ -11,12 +11,14 @@ const TEMPLATES = [
   { name: "Decision Record", icon: "⊞", content: "## Context\n\n## Options\n\n## Decision\n\n## Consequences" },
 ];
 
-export default function DocsView({ 
+export default function DocsView({
   docs, entries, allTags, onAddDoc, onUpdateDoc, onDeleteDoc, onLinkEntry, onUnlinkEntry,
-  activeDocId, setActiveDocId 
+  activeDocId, setActiveDocId,
+  folders = [], onAddFolder, onUpdateFolder, onRemoveFolder
 }) {
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState(null);
+  const [folderFilter, setFolderFilter] = useState(null); // null = all, "none" = unfiled, folderId
   const [viewMode, setViewMode] = useState("edit"); // "edit" | "preview" | "split"
   const [showLinkSearch, setShowLinkSearch] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
@@ -24,6 +26,10 @@ export default function DocsView({
   const [showLinkAutocomplete, setShowLinkAutocomplete] = useState(false);
   const [linkAutocompletePos, setLinkAutocompletePos] = useState(null);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [addingFolder, setAddingFolder] = useState(false);
+  const [renamingFolderId, setRenamingFolderId] = useState(null);
+  const [renamingValue, setRenamingValue] = useState("");
   
   const contentRef = useRef(null);
   const linkInputRef = useRef(null);
@@ -37,6 +43,11 @@ export default function DocsView({
 
   const activeDoc = useMemo(() => docs.find(d => d.id === activeDocId), [docs, activeDocId]);
 
+  const wordCount = useMemo(() => {
+    if (!activeDoc?.content) return 0;
+    return activeDoc.content.trim().split(/\s+/).filter(Boolean).length;
+  }, [activeDoc?.content]);
+
   const filtered = useMemo(() => {
     let result = docs;
     if (search.trim()) {
@@ -44,12 +55,14 @@ export default function DocsView({
       result = result.filter(d => d.title?.toLowerCase().includes(q) || d.content?.toLowerCase().includes(q) || d.tags?.some(t => t.toLowerCase().includes(q)));
     }
     if (tagFilter) result = result.filter(d => (d.tags || []).includes(tagFilter));
+    if (folderFilter === "none") result = result.filter(d => !d.folderId);
+    else if (folderFilter) result = result.filter(d => d.folderId === folderFilter);
     return result.sort((a, b) => {
       if (b.pinned && !a.pinned) return 1;
       if (a.pinned && !b.pinned) return -1;
       return (b.updatedAt || b.ts) - (a.updatedAt || a.ts);
     });
-  }, [docs, search, tagFilter]);
+  }, [docs, search, tagFilter, folderFilter]);
 
   const handleNewDoc = () => {
     const doc = onAddDoc({ title: "", content: "", tags: [] });
@@ -140,6 +153,68 @@ export default function DocsView({
     <div style={{ height: "100%", display: "flex", overflow: "hidden" }} onClick={() => setShowTagPicker(false)}>
       {showList && (
         <div style={{ width: isMobile ? "100%" : 280, minWidth: isMobile ? "100%" : 280, borderRight: "1px solid var(--border)", background: "var(--bg-card)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Folders sidebar section */}
+          <div style={{ borderBottom: "1px solid var(--border-light)", padding: "10px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", flex: 1 }}>Folders</span>
+              <button onClick={() => setAddingFolder(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", fontSize: 16, padding: "0 2px", lineHeight: 1 }} title="New folder">+</button>
+            </div>
+            {addingFolder && (
+              <input
+                autoFocus
+                value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newFolderName.trim()) { onAddFolder({ name: newFolderName.trim() }); setNewFolderName(""); setAddingFolder(false); }
+                  if (e.key === "Escape") { setAddingFolder(false); setNewFolderName(""); }
+                }}
+                onBlur={() => { setAddingFolder(false); setNewFolderName(""); }}
+                placeholder="Folder name..."
+                style={{ width: "100%", padding: "4px 8px", border: "1px solid var(--accent)", borderRadius: 6, background: "var(--bg)", fontFamily: "'Inter', sans-serif", fontSize: 12, color: "var(--text)", outline: "none", marginBottom: 4 }}
+              />
+            )}
+            <button
+              onClick={() => setFolderFilter(null)}
+              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "4px 6px", border: "none", borderRadius: 6, background: folderFilter === null ? "var(--accent-light)" : "transparent", color: folderFilter === null ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif", textAlign: "left" }}
+            >
+              ≡ All Documents <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{docs.length}</span>
+            </button>
+            {folders.map(folder => (
+              <div key={folder.id} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                {renamingFolderId === folder.id ? (
+                  <input
+                    autoFocus
+                    value={renamingValue}
+                    onChange={e => setRenamingValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && renamingValue.trim()) { onUpdateFolder(folder.id, { name: renamingValue.trim() }); setRenamingFolderId(null); }
+                      if (e.key === "Escape") setRenamingFolderId(null);
+                    }}
+                    onBlur={() => setRenamingFolderId(null)}
+                    style={{ flex: 1, padding: "3px 6px", border: "1px solid var(--accent)", borderRadius: 6, background: "var(--bg)", fontFamily: "'Inter', sans-serif", fontSize: 12, color: "var(--text)", outline: "none" }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setFolderFilter(folder.id)}
+                    onDoubleClick={() => { setRenamingFolderId(folder.id); setRenamingValue(folder.name); }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, padding: "4px 6px", border: "none", borderRadius: 6, background: folderFilter === folder.id ? "var(--accent-light)" : "transparent", color: folderFilter === folder.id ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif", textAlign: "left" }}
+                  >
+                    <span style={{ fontSize: 13 }}>▸</span>
+                    {folder.name}
+                    <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{docs.filter(d => d.folderId === folder.id).length}</span>
+                  </button>
+                )}
+                <button onClick={() => { if (window.confirm(`Delete folder "${folder.name}"?`)) onRemoveFolder(folder.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", fontSize: 12, padding: "2px 4px", opacity: 0.5, flexShrink: 0 }} onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.color = "var(--red)"; }} onMouseLeave={e => { e.currentTarget.style.opacity = 0.5; e.currentTarget.style.color = "var(--text-tertiary)"; }} title="Delete folder">×</button>
+              </div>
+            ))}
+            <button
+              onClick={() => setFolderFilter("none")}
+              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "4px 6px", border: "none", borderRadius: 6, background: folderFilter === "none" ? "var(--accent-light)" : "transparent", color: folderFilter === "none" ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "'Inter', sans-serif", textAlign: "left" }}
+            >
+              ◦ Unfiled <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{docs.filter(d => !d.folderId).length}</span>
+            </button>
+          </div>
+
           <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid var(--border-light)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 600, color: "var(--text)" }}>≡ Documents</span>
@@ -220,6 +295,17 @@ export default function DocsView({
                 
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-light)" }}>
                   <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>Updated {formatShort(activeDoc.updatedAt)}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>{wordCount} words</span>
+                  {folders.length > 0 && (
+                    <select
+                      value={activeDoc.folderId || ""}
+                      onChange={e => onUpdateDoc(activeDocId, { folderId: e.target.value || null })}
+                      style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "'Inter', sans-serif", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, padding: "3px 8px", cursor: "pointer", outline: "none" }}
+                    >
+                      <option value="">No folder</option>
+                      {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                  )}
                   <div style={{ flex: 1 }} />
                   <div style={{ display: "flex", gap: 2, border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
                     {[["edit", "✎"], ["split", "⊞"], ["preview", "◈"]].map(([m, sym]) => (
