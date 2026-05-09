@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "./supabaseClient";
 import { AppProvider, useAppContext } from "./context/AppContext.jsx";
-import { formatTime, formatDate, formatShort, generateId } from "./utils/helpers.jsx";
+import { formatTime, formatDate, formatShort, generateId, ENTRY_TYPES } from "./utils/helpers.jsx";
 import { extractLinks, resolveLinks, processBidirectionalLinks } from "./utils/links.jsx";
 import AuthView from "./components/auth/AuthView";
 import Nav from "./components/layout/Nav";
@@ -378,6 +378,89 @@ body {
 }
 `;
 
+// ---- Global Search Component ----
+function GlobalSearch({ entries, docs, onClose, onOpenDoc, setView }) {
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const results = useMemo(() => {
+    if (!q.trim()) return [];
+    const query = q.toLowerCase();
+    const docResults = docs
+      .filter(d => d.title?.toLowerCase().includes(query) || d.content?.toLowerCase().includes(query) || d.tags?.some(t => t.toLowerCase().includes(query)))
+      .slice(0, 5)
+      .map(d => ({ type: "doc", id: d.id, label: d.title || "Untitled", sym: "≡", col: "var(--accent)" }));
+    const entryResults = entries
+      .filter(e => e.text?.toLowerCase().includes(query) || e.tags?.some(t => t.toLowerCase().includes(query)))
+      .slice(0, 5)
+      .map(e => ({ type: "entry", id: e.id, label: e.text?.slice(0, 70) || "(empty)", sym: ENTRY_TYPES[e.type]?.sym || "◦", col: ENTRY_TYPES[e.type]?.col }));
+    return [...docResults, ...entryResults].slice(0, 8);
+  }, [q, entries, docs]);
+
+  const go = (r) => {
+    if (r.type === "doc") onOpenDoc(r.id);
+    else setView("journal");
+    onClose();
+  };
+
+  const onKey = (e) => {
+    if (e.key === "Escape") { onClose(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setSel(s => Math.min(s + 1, results.length - 1)); }
+    if (e.key === "ArrowUp") { e.preventDefault(); setSel(s => Math.max(s - 1, 0)); }
+    if (e.key === "Enter" && results[sel]) go(results[sel]);
+  };
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "16vh" }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 14, boxShadow: "var(--shadow-lg)", width: "100%", maxWidth: 560, margin: "0 16px", overflow: "hidden" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: "1px solid var(--border-light)" }}>
+          <span style={{ color: "var(--text-tertiary)", fontSize: 18 }}>◎</span>
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={e => { setQ(e.target.value); setSel(0); }}
+            onKeyDown={onKey}
+            placeholder="Search entries and docs..."
+            style={{ flex: 1, border: "none", outline: "none", fontFamily: "'Inter', sans-serif", fontSize: 16, background: "transparent", color: "var(--text)" }}
+          />
+          <kbd style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: "var(--text-tertiary)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 6px" }}>Esc</kbd>
+        </div>
+        {q.trim() && results.length === 0 ? (
+          <div style={{ padding: "24px", textAlign: "center", color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>No results for "{q}"</div>
+        ) : !q.trim() ? (
+          <div style={{ padding: "16px", textAlign: "center", color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif", fontSize: 13 }}>
+            Type to search across all entries and docs
+            <span style={{ margin: "0 6px" }}>·</span>
+            <kbd style={{ fontSize: 11, border: "1px solid var(--border)", borderRadius: 4, padding: "1px 5px" }}>↑↓</kbd> navigate
+            <span style={{ margin: "0 6px" }}>·</span>
+            <kbd style={{ fontSize: 11, border: "1px solid var(--border)", borderRadius: 4, padding: "1px 5px" }}>↩</kbd> open
+          </div>
+        ) : results.map((r, i) => (
+          <div
+            key={r.id}
+            onClick={() => go(r)}
+            onMouseEnter={() => setSel(i)}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: i === sel ? "var(--accent-light)" : "transparent", cursor: "pointer", borderBottom: i < results.length - 1 ? "1px solid var(--border-light)" : "none" }}
+          >
+            <span style={{ color: r.col, fontSize: 15, flexShrink: 0 }}>{r.sym}</span>
+            <span style={{ flex: 1, fontFamily: "'Inter', sans-serif", fontSize: 14, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+            <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>{r.type}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ---- Main App Component ----
 function AppContent() {
   const [view, setView] = useState("journal");
@@ -385,13 +468,25 @@ function AppContent() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'system');
-  
+  const [showSearch, setShowSearch] = useState(false);
+
   // Lifted state to allow "Jump to Doc" to work seamlessly globally
   const [activeDocId, setActiveDocId] = useState(null);
-  
+
   const openDoc = useCallback((docId) => {
     setActiveDocId(docId);
     setView("docs");
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setShowSearch(s => !s);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
   
   useEffect(() => {
@@ -474,6 +569,25 @@ function AppContent() {
 
   const linkMap = processAllLinks(entries, docs);
 
+  const handleSendToCanvas = useCallback((entry) => {
+    if (entry.type === "idea" || entry.type === "sketch") {
+      updateEntry(entry.id, { archived: false });
+    } else {
+      addEntry({
+        text: entry.text,
+        type: "idea",
+        tags: entry.tags || [],
+        ideaX: 300 + Math.random() * 400,
+        ideaY: 200 + Math.random() * 300,
+        width: 220,
+        height: 160,
+        strokes: [],
+        archived: false
+      });
+    }
+    setView("ideas");
+  }, [addEntry, updateEntry]);
+
   const handleExport = useCallback(() => {
     let md = "# Interstitial Journal Export\n\n";
     
@@ -520,19 +634,20 @@ function AppContent() {
     <>
       <style>{CSS}</style>
       <div className="app-container">
-        <Nav 
-          view={view} 
-          setView={setView} 
+        <Nav
+          view={view}
+          setView={setView}
           syncStatus={syncStatus}
           onExport={handleExport}
           theme={theme}
           setTheme={setTheme}
+          onOpenSearch={() => setShowSearch(true)}
         />
         <div className="app-content">
           {view === "journal" && (
-            <JournalView 
+            <JournalView
               entries={entries} docs={docs} onAddEntry={addEntry} onUpdateEntry={updateEntry} onRemoveEntry={removeEntry} linkMap={linkMap} allTags={allTags}
-              openDoc={openDoc} 
+              openDoc={openDoc} onSendToCanvas={handleSendToCanvas}
             />
           )}
           {view === "kanban" && (
@@ -556,6 +671,15 @@ function AppContent() {
         </div>
         <MobileNav view={view} setView={setView} />
       </div>
+      {showSearch && (
+        <GlobalSearch
+          entries={entries}
+          docs={docs}
+          onClose={() => setShowSearch(false)}
+          onOpenDoc={openDoc}
+          setView={setView}
+        />
+      )}
     </>
   );
 }
