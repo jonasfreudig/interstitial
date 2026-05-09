@@ -47,14 +47,15 @@ export default function FormatToolbar({ value, onChange, textareaRef }) {
       <FormatBtn onClick={() => apply("h3")} title="Subheading (### )">
         H3
       </FormatBtn>
-      <FormatBtn onClick={() => apply("bullet")} title="Bullet (- )">
-        •
-      </FormatBtn>
-      
+      <FormatBtn onClick={() => apply("bullet")} title="Bullet (- )">•</FormatBtn>
+      <FormatBtn onClick={() => apply("number")} title="Numbered list (1. )">1.</FormatBtn>
+      <FormatBtn onClick={() => apply("strike")} title="Strikethrough (~~text~~)"><s>S</s></FormatBtn>
+      <FormatBtn onClick={() => apply("quote")} title="Blockquote (> )">"</FormatBtn>
+
       <div style={{ width: 1, background: "var(--border)", margin: "0 4px" }} />
-      
-      <FormatBtn 
-        onClick={() => apply("task")} 
+
+      <FormatBtn
+        onClick={() => apply("task")}
         title="Task (- [ ] )"
         style={{ color: "var(--accent)" }}
       >

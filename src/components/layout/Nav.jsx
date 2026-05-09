@@ -1,6 +1,6 @@
 import { supabase } from "../../supabaseClient";
 
-export default function Nav({ view, setView, syncStatus, onExport, theme, setTheme, onOpenSearch }) {
+export default function Nav({ view, setView, syncStatus, onExport, theme, setTheme, onOpenSearch, onOpenTimer, timerRunning }) {
   const syncLabels = {
     synced: "saved",
     saving: "saving...",
@@ -46,6 +46,15 @@ export default function Nav({ view, setView, syncStatus, onExport, theme, setThe
 
       <button className="nav-btn" onClick={onOpenSearch} title="Search (⌘K)">
         ◎ Search
+      </button>
+
+      <button
+        className="nav-btn"
+        onClick={onOpenTimer}
+        title="Pomodoro Timer"
+        style={timerRunning ? { background: "rgba(196,74,58,0.12)", color: "var(--red)", borderColor: "var(--red)" } : {}}
+      >
+        {timerRunning ? "⏱ Running" : "⏱ Focus"}
       </button>
 
       <select

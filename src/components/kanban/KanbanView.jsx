@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { TagChip } from "../shared/TagSystem";
-import { formatTime, extractInlineTasks, KANBAN_COLS, ENTRY_TYPES } from "../../utils/helpers";
+import { formatTime, extractInlineTasks, KANBAN_COLS, ENTRY_TYPES, RECURRENCE_LABELS } from "../../utils/helpers";
+
+const RECURRENCE_OPTIONS = [
+  { value: null, label: "No repeat" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
 
 export default function KanbanView({ entries, onUpdateEntry, onAddEntry }) {
   const [dragId, setDragId] = useState(null);
@@ -8,6 +15,7 @@ export default function KanbanView({ entries, onUpdateEntry, onAddEntry }) {
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState("");
   const [newTask, setNewTask] = useState("");
+  const [recurrencePickerId, setRecurrencePickerId] = useState(null);
   const editRef = useRef(null);
 
   // Get all tasks (regular + inline)
@@ -300,25 +308,62 @@ export default function KanbanView({ entries, onUpdateEntry, onAddEntry }) {
                       </span>
 
                       {!task.isInline && editingId !== task.id && (
-                        <button
-                          onClick={() => {
-                            setEditingId(task.id);
-                            setEditingText(task.text);
-                          }}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            color: "var(--text-tertiary)",
-                            fontSize: 13,
-                            padding: "2px 6px",
-                            opacity: 0.5,
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                          onMouseLeave={e => e.currentTarget.style.opacity = 0.5}
-                        >
-                          ✎
-                        </button>
+                        <>
+                          <div style={{ position: "relative" }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRecurrencePickerId(recurrencePickerId === task.id ? null : task.id); }}
+                              style={{
+                                background: task.recurrence ? "rgba(74,111,165,0.1)" : "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: task.recurrence ? "var(--accent)" : "var(--text-tertiary)",
+                                fontSize: 13,
+                                padding: "2px 6px",
+                                opacity: task.recurrence ? 1 : 0.5,
+                                borderRadius: 4,
+                              }}
+                              title={task.recurrence ? `Repeats ${task.recurrence}` : "Set recurrence"}
+                              onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                              onMouseLeave={e => { if (!task.recurrence) e.currentTarget.style.opacity = 0.5; }}
+                            >
+                              ↻{task.recurrence ? ` ${RECURRENCE_LABELS?.[task.recurrence] || task.recurrence}` : ""}
+                            </button>
+                            {recurrencePickerId === task.id && (
+                              <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-md)", zIndex: 200, minWidth: 140, overflow: "hidden" }}>
+                                {RECURRENCE_OPTIONS.map(opt => (
+                                  <button
+                                    key={String(opt.value)}
+                                    onClick={(e) => { e.stopPropagation(); onUpdateEntry(task.id, { recurrence: opt.value }); setRecurrencePickerId(null); }}
+                                    style={{ display: "block", width: "100%", padding: "9px 14px", border: "none", borderBottom: "1px solid var(--border-light)", background: task.recurrence === opt.value ? "var(--accent-light)" : "none", color: task.recurrence === opt.value ? "var(--accent)" : "var(--text)", cursor: "pointer", textAlign: "left", fontFamily: "'Inter', sans-serif", fontSize: 13 }}
+                                    onMouseEnter={e => { if (task.recurrence !== opt.value) e.currentTarget.style.background = "var(--accent-light)"; }}
+                                    onMouseLeave={e => { if (task.recurrence !== opt.value) e.currentTarget.style.background = "none"; }}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setEditingId(task.id);
+                              setEditingText(task.text);
+                            }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "var(--text-tertiary)",
+                              fontSize: 13,
+                              padding: "2px 6px",
+                              opacity: 0.5,
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                            onMouseLeave={e => e.currentTarget.style.opacity = 0.5}
+                          >
+                            ✎
+                          </button>
+                        </>
                       )}
 
                       {/* Tags */}

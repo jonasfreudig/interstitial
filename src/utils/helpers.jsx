@@ -66,6 +66,7 @@ export const ENTRY_TYPES = {
   task:   { sym: "⊞",  label: "Task",   col: "#4a6fa5" },
   idea:   { sym: "◈",  label: "Idea",   col: "#b87333" },
   sketch: { sym: "〰",  label: "Sketch", col: "#7a5c8a" },
+  image:  { sym: "⊡",  label: "Image",  col: "#5b8888" },
 };
 
 export const KANBAN_COLS = [
@@ -80,7 +81,7 @@ export function renderInline(text) {
   
   const parts = [];
   let lastIndex = 0;
-  const regex = /(\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|`([^`\n]+)`|\[\[([^\]]+)\]\])/g;
+  const regex = /(\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|`([^`\n]+)`|\[\[([^\]]+)\]\]|~~([^~\n]+)~~)/g;
   let match;
   
   while ((match = regex.exec(text)) !== null) {
@@ -100,6 +101,9 @@ export function renderInline(text) {
     } else if (match[5] !== undefined) {
       // Wiki link
       parts.push({ type: "link", query: match[5], raw: match[0] });
+    } else if (match[6] !== undefined) {
+      // Strikethrough
+      parts.push({ type: "strike", content: match[6] });
     }
     
     lastIndex = match.index + match[0].length;
@@ -144,6 +148,17 @@ export function renderMarkdown(text, options = {}) {
       return { type: "idea", content: ideaMatch[1], key: i };
     }
     
+    // Blockquote
+    if (line.startsWith("> ")) {
+      return { type: "blockquote", content: line.slice(2), key: i };
+    }
+
+    // Numbered list
+    const numberedMatch = line.match(/^(\d+)\. (.+)$/);
+    if (numberedMatch) {
+      return { type: "numbered", num: numberedMatch[1], content: numberedMatch[2], key: i };
+    }
+
     // Bullet
     if (line.startsWith("- ")) {
       return { type: "bullet", content: line.slice(2), key: i };
@@ -187,6 +202,10 @@ export function MarkdownContent({ text, onToggleTask, onLinkClick, linkMap = {} 
         return <div key={line.key} className="idea-line">◈ {renderInlineToJSX(line.content, onLinkClick)}</div>;
       case "bullet":
         return <div key={line.key} className="markdown-content">• {renderInlineToJSX(line.content, onLinkClick)}</div>;
+      case "blockquote":
+        return <div key={line.key} className="blockquote-line">{renderInlineToJSX(line.content, onLinkClick)}</div>;
+      case "numbered":
+        return <div key={line.key} className="markdown-content">{line.num}. {renderInlineToJSX(line.content, onLinkClick)}</div>;
       case "spacer":
         return <div key={line.key} style={{ height: 8 }} />;
       case "paragraph":
@@ -215,14 +234,16 @@ function renderInlineToJSX(text, onLinkClick) {
         return <code key={i}>{part.content}</code>;
       case "link":
         return (
-          <span 
-            key={i} 
+          <span
+            key={i}
             className="doc-link"
             onClick={() => onLinkClick?.(part.query)}
           >
             {part.raw}
           </span>
         );
+      case "strike":
+        return <del key={i}>{part.content}</del>;
       default:
         return null;
     }
@@ -244,7 +265,10 @@ export function applyFormat(type, value, selStart, selEnd) {
     bullet: { prefix: "- ", suffix: "", placeholder: "" },
     task: { prefix: "- [ ] ", suffix: "", placeholder: "" },
     idea: { prefix: "-! ", suffix: "", placeholder: "" },
-    link: { prefix: "[[", suffix: "]]", placeholder: "link" },
+    link:   { prefix: "[[", suffix: "]]", placeholder: "link" },
+    strike: { prefix: "~~", suffix: "~~", placeholder: "text" },
+    quote:  { prefix: "> ", suffix: "", placeholder: "" },
+    number: { prefix: "1. ", suffix: "", placeholder: "" },
   };
   
   const fmt = formats[type];
@@ -350,6 +374,27 @@ export function extractInlineTasks(entries) {
   });
   return tasks;
 }
+
+// ---- Recurring Task Helpers ----
+export function computeNextOccurrence(recurrence) {
+  const now = Date.now();
+  const intervals = {
+    daily:   1 * 24 * 60 * 60 * 1000,
+    weekly:  7 * 24 * 60 * 60 * 1000,
+    monthly: 30 * 24 * 60 * 60 * 1000,
+  };
+  const ms = recurrence.type === "custom"
+    ? (recurrence.interval || 1) * (recurrence.unit === "weeks" ? 7 : 1) * 24 * 60 * 60 * 1000
+    : (intervals[recurrence.type] || intervals.daily);
+  return now + ms;
+}
+
+export const RECURRENCE_LABELS = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+  custom: "Custom",
+};
 
 // ---- Export ----
 export function exportToMarkdown(entries, docs) {
