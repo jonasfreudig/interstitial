@@ -47,6 +47,7 @@ export default function IdeasCanvas({
   const [framePreview, setFramePreview] = useState(null);
   const [editingFrameId, setEditingFrameId] = useState(null);
   const [sketchTool, setSketchTool] = useState("draw");
+  const [colorPickerId, setColorPickerId] = useState(null);
   
   const viewportRef = useRef(null);
   const dragRef = useRef(null);
@@ -68,6 +69,34 @@ export default function IdeasCanvas({
       editRef.current.setSelectionRange(len, len);
     }
   }, [editingId]);
+
+  // N key: drop new idea at viewport center
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "n" && e.key !== "N") return;
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || editingId) return;
+      const vw = viewportRef.current?.clientWidth || 800;
+      const vh = viewportRef.current?.clientHeight || 600;
+      const x = (vw / 2 - cam.x) / cam.z;
+      const y = (vh / 2 - cam.y) / cam.z;
+      onAddEntry({ text: "", type: "idea", ideaX: x - 110, ideaY: y - 80, width: 220, height: 160, strokes: [], archived: false });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editingId, cam, onAddEntry]);
+
+  const fitToFrame = useCallback((frame) => {
+    const vw = viewportRef.current?.clientWidth || 800;
+    const vh = viewportRef.current?.clientHeight || 600;
+    const padding = 60;
+    const newZ = Math.min((vw - padding * 2) / frame.w, (vh - padding * 2) / frame.h, 2);
+    setCam({
+      x: vw / 2 - (frame.x + frame.w / 2) * newZ,
+      y: vh / 2 - (frame.y + frame.h / 2) * newZ,
+      z: Math.max(0.1, newZ)
+    });
+  }, []);
 
   const activeIdeas = useMemo(() => entries.filter(e => (e.type === "idea" || e.type === "sketch") && !e.archived), [entries]);
   const archivedIdeas = useMemo(() => entries.filter(e => (e.type === "idea" || e.type === "sketch") && e.archived), [entries]);
@@ -347,6 +376,7 @@ export default function IdeasCanvas({
                     {frame.label} ({frameItems.length})
                   </div>
                 )}
+                <button onClick={() => fitToFrame(frame)} onPointerDown={e => e.stopPropagation()} style={{ background: "none", border: "none", cursor: "pointer", color: frame.color, fontSize: 14, padding: "0 2px" }} title="Fit to frame">⛶</button>
                 <button onClick={() => onRemoveFrame(frame.id)} onPointerDown={e => e.stopPropagation()} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", fontSize: 16, padding: "0 2px" }}>×</button>
               </div>
               <div onPointerDown={e => onFrameResizeDrag(e, frame)} style={{ position: "absolute", bottom: 0, right: 0, width: 24, height: 24, cursor: "nwse-resize", display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: 4, color: frame.color, opacity: 0.8 }}>◢</div>
@@ -389,8 +419,8 @@ export default function IdeasCanvas({
           return (
             <div 
               key={idea.id} 
-              className={`inote ${connectFrom === idea.id ? "isel" : ""}`} 
-              style={{ left: pos.left, top: pos.top, width: iW, minHeight: idea.type === "sketch" ? iH : "auto", cursor: mode === "connect" ? "pointer" : "grab", zIndex: isEditing ? 100 : 10, transform: `scale(${scale})`, transformOrigin: "top left" }} 
+              className={`inote ${connectFrom === idea.id ? "isel" : ""}`}
+              style={{ left: pos.left, top: pos.top, width: iW, minHeight: idea.type === "sketch" ? iH : "auto", cursor: mode === "connect" ? "pointer" : "grab", zIndex: isEditing ? 100 : 10, transform: `scale(${scale})`, transformOrigin: "top left", background: idea.color ? `${idea.color}14` : "var(--bg-card)" }}
               onPointerDown={e => onNoteDrag(e, idea)}
             >
               <div className="inote-pin" style={{ background: idea.type === "sketch" ? "#7a5c8a" : "var(--amber)" }} />
@@ -436,13 +466,31 @@ export default function IdeasCanvas({
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border-light)" }}>
                 <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "'Inter', sans-serif" }}>{formatTime(idea.ts)}</span>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <button onClick={() => onUpdateEntry(idea.id, { archived: true })} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-tertiary)" }}>⊙</button>
-                  <button onClick={(e) => { 
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <button onClick={() => onUpdateEntry(idea.id, { archived: true })} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-tertiary)" }} title="Archive">⊙</button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setColorPickerId(colorPickerId === idea.id ? null : idea.id); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: idea.color || "var(--text-tertiary)", padding: 0 }}
+                      title="Color"
+                    >◉</button>
+                    {colorPickerId === idea.id && (
+                      <div
+                        onPointerDown={e => e.stopPropagation()}
+                        style={{ position: "absolute", bottom: 22, left: -28, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 8px", display: "flex", gap: 4, boxShadow: "var(--shadow-md)", zIndex: 200 }}
+                      >
+                        <button onClick={(e) => { e.stopPropagation(); onUpdateEntry(idea.id, { color: null }); setColorPickerId(null); }} style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--bg)", border: "1.5px solid var(--border)", cursor: "pointer" }} title="None" />
+                        {PALETTE.slice(0, 8).map(hex => (
+                          <button key={hex} onClick={(e) => { e.stopPropagation(); onUpdateEntry(idea.id, { color: hex === idea.color ? null : hex }); setColorPickerId(null); }} style={{ width: 16, height: 16, borderRadius: "50%", background: hex, border: idea.color === hex ? "2.5px solid var(--text)" : "2px solid transparent", cursor: "pointer" }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={(e) => {
                     e.stopPropagation();
-                    if (idea.type === "sketch") { setEditingId(idea.id); setMode("select"); setSketchTool("draw"); } 
+                    if (idea.type === "sketch") { setEditingId(idea.id); setMode("select"); setSketchTool("draw"); }
                     else { setEditingId(idea.id); setEditingText(idea.text); }
-                  }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-tertiary)" }}>✎</button>
+                  }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-tertiary)" }} title="Edit">✎</button>
                   <button onClick={() => onRemoveEntry(idea.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--red)" }}>×</button>
                 </div>
               </div>

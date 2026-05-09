@@ -1,6 +1,6 @@
 import { supabase } from "../../supabaseClient";
 
-export default function Nav({ view, setView, syncStatus, onExport, theme, setTheme }) {
+export default function Nav({ view, setView, syncStatus, onExport, theme, setTheme, onOpenSearch }) {
   const syncLabels = {
     synced: "saved",
     saving: "saving...",
@@ -43,8 +43,12 @@ export default function Nav({ view, setView, syncStatus, onExport, theme, setThe
       </button>
       
       <div style={{ flex: 1 }} />
-      
-      <select 
+
+      <button className="nav-btn" onClick={onOpenSearch} title="Search (⌘K)">
+        ◎ Search
+      </button>
+
+      <select
         value={theme} 
         onChange={(e) => setTheme(e.target.value)}
         className="nav-btn"
