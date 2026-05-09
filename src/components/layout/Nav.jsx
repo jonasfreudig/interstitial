@@ -1,6 +1,7 @@
 import { supabase } from "../../supabaseClient";
+import { ACCENTS } from "../../App";
 
-export default function Nav({ view, setView, syncStatus, onExport, theme, setTheme, onOpenSearch, onOpenTimer, timerRunning }) {
+export default function Nav({ view, setView, syncStatus, onExport, theme, setTheme, accent, setAccent, onOpenSearch, onOpenTimer, timerRunning }) {
   const syncLabels = {
     synced: "saved",
     saving: "saving...",
@@ -58,7 +59,7 @@ export default function Nav({ view, setView, syncStatus, onExport, theme, setThe
       </button>
 
       <select
-        value={theme} 
+        value={theme}
         onChange={(e) => setTheme(e.target.value)}
         className="nav-btn"
         style={{ WebkitAppearance: "none", outline: "none", background: "transparent" }}
@@ -67,7 +68,31 @@ export default function Nav({ view, setView, syncStatus, onExport, theme, setThe
         <option value="light">Light</option>
         <option value="dark">Dark</option>
         <option value="sepia">Sepia</option>
-      </select> 
+      </select>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 20 }}>
+        {ACCENTS.map(a => (
+          <button
+            key={a.value}
+            title={a.name}
+            onClick={() => setAccent(a.value)}
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: "50%",
+              background: a.value,
+              border: accent === a.value ? `2px solid var(--text)` : "2px solid transparent",
+              outline: accent === a.value ? `2px solid ${a.value}` : "none",
+              outlineOffset: 1,
+              cursor: "pointer",
+              transition: "transform 0.15s",
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.25)"}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+          />
+        ))}
+      </div>
 
       <button className="nav-btn" onClick={onExport}>
         ↓ Export
